@@ -3,10 +3,10 @@
 import os, csv, arcpy
 
 
-scratchWorkspace = r"D:\Ismael"
-gdb = os.path.join(scratchWorkspace,"SurveyFGDB.gdb")
+scratchWorkspace = r"D:\Ismael\Surveys"
+surveyName = "Household"
+gdb = os.path.join(scratchWorkspace,surveyName + "FGDB.gdb")
 featureclass = os.path.join (gdb,"survey")
-hasAttachments = False
 
 codedValueDomains = []
 
@@ -18,11 +18,8 @@ def main():
     # Unzip input file
 
     # Create fileGDB
-    arcpy.CreateFileGDB_management(scratchWorkspace, out_name="SurveyFGDB", out_version="CURRENT")
+    arcpy.CreateFileGDB_management(scratchWorkspace, out_name=surveyName + "FGDB", out_version="CURRENT")
     
-
-    # Get choices csv file, create and populate domains
-    #createGDBDomainsFromChoices()
     # Create featureclass schema
     createFCSchemaFromSurvey ()
 
@@ -33,7 +30,7 @@ def createFCSchemaFromSurvey():
        surveyCSV = os.path.join(scratchWorkspace, "survey.csv")
 
        arcpy.CreateFeatureclass_management(gdb, 'survey' ,"POINT", spatial_reference=arcpy.SpatialReference('WGS 1984'))
-       
+       hasAttachments = False
 
        with open(surveyCSV) as csvfile:
          reader = csv.DictReader(csvfile)
@@ -46,13 +43,14 @@ def createFCSchemaFromSurvey():
            # If Type is 'select_one', add a field with its corresponding coded value domain
            if (fieldType.find("select_one ")==0):
              domainName = fieldType.replace("select_one ","")
-             print "Adding Field with Domain: " + domainName
-             addCodedValueDomain (domainName)
+             print "Adding Field '" + fieldName + "' with Domain: " + domainName
+             if not (domainName in codedValueDomains):
+                addCodedValueDomain (domainName)
              arcpy.AddField_management(featureclass, fieldName,field_type="TEXT" ,field_alias=fieldAlias, field_domain=domainName)
            # If Type is 'select_multiple', add as many fields as needed to support the choices 
            elif (fieldType.find("select_multiple ")==0):
              choiceList = fieldType.replace("select_multiple ","")
-             print "Adding Multiple Selection: " + choiceList
+             print "Adding Field '" + fieldName + "' With multiple Selection: " + choiceList
              addFieldsFromMultipleChoice (featureclass,choiceList)
            # If Type is 'image', 'audio' or 'video' enable attachments if not already
            elif (fieldType == "image" or fieldType == "audio" or fieldType == "video"):
@@ -82,21 +80,24 @@ def createFCSchemaFromSurvey():
 def addCodedValueDomain(inputChoiceListName):                   
     print "   addCodedValueDomain {" + inputChoiceListName + " )"
     try:
+        
        if (inputChoiceListName in codedValueDomains):
+           print "   coded value domain already exists. Skipping..."
            return
 
        arcpy.CreateDomain_management(in_workspace=gdb, domain_name=inputChoiceListName, domain_description=inputChoiceListName, field_type="TEXT", domain_type="CODED", split_policy="DEFAULT", merge_policy="DEFAULT")
-        
+       codedValueDomains.append(inputChoiceListName)
+    
        choicesCSV = os.path.join(scratchWorkspace, "choices.csv")
        with open(choicesCSV) as csvfile:
          reader = csv.DictReader(csvfile)
          for row in reader:
             domainName = row['list name']
-            if ((not domainName.isspace()) and (len(domainName)>0)):
-                if (domainName == inputChoiceListName):
-                  codedValue = row['name']
-                  codedDescription = row['label']
-                  arcpy.AddCodedValueToDomain_management(in_workspace=gdb, domain_name=domainName, code=codedValue, code_description=codedDescription)
+            if (domainName == inputChoiceListName):                 
+                 codedValue = row['name']
+                 codedDescription = row['label']
+                 print "     adding coded value: " + codedValue + ":" + codedDescription
+                 arcpy.AddCodedValueToDomain_management(in_workspace=gdb, domain_name=domainName, code=codedValue, code_description=codedDescription)
                 
 
     except Exception as e:
@@ -115,6 +116,7 @@ def addFieldsFromMultipleChoice(inputFeatureclass,inputChoiceListName):
             if (choiceListName==inputChoiceListName):
                 fieldName = row['name']
                 fieldAlias = row['label']
+                print "     adding Choice as new Field: '" + fieldName + "'"
                 arcpy.AddField_management(inputFeatureclass, fieldName,field_type="SHORT" ,field_alias=fieldAlias)
                 
 
