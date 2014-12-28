@@ -6,6 +6,7 @@ import os, csv, arcpy
 scratchWorkspace = r"D:\Ismael"
 gdb = os.path.join(scratchWorkspace,"SurveyFGDB.gdb")
 featureclass = os.path.join (gdb,"survey")
+hasAttachments = False
 
 codedValueDomains = []
 
@@ -31,8 +32,6 @@ def createFCSchemaFromSurvey():
     try:
        surveyCSV = os.path.join(scratchWorkspace, "survey.csv")
 
-
-       
        arcpy.CreateFeatureclass_management(gdb, 'survey' ,"POINT", spatial_reference=arcpy.SpatialReference('WGS 1984'))
        
 
@@ -55,9 +54,14 @@ def createFCSchemaFromSurvey():
              choiceList = fieldType.replace("select_multiple ","")
              print "Adding Multiple Selection: " + choiceList
              addFieldsFromMultipleChoice (featureclass,choiceList)
-           # Add standard fields as long as the Type is not a 'note', 'group' or empty
-           else:         
-             if ((not fieldType.isspace()) and (len(fieldType)>0) and ( (fieldType == "text")or (fieldType == "barcode")  or (fieldType == "integer") or (fieldType == "double")or (fieldType == "date") or (fieldType == "time")) ):
+           # If Type is 'image', 'audio' or 'video' enable attachments if not already
+           elif (fieldType == "image" or fieldType == "audio" or fieldType == "video"):
+             if (hasAttachments == False):
+                print "Enabling Attachments"
+                arcpy.EnableAttachments_management(in_dataset=featureclass)
+                hasAttachments = True
+           # Add standard fields as long as the Type is not a 'note', 'group' or empty      
+           elif ((fieldType == "text")or (fieldType == "barcode")  or (fieldType == "integer") or (fieldType == "double")or (fieldType == "date") or (fieldType == "time")):
               if (fieldType == "text") or (fieldType=="barcode"):
                 fieldType="TEXT"
               elif (fieldType == "integer"):
@@ -68,6 +72,7 @@ def createFCSchemaFromSurvey():
                 fieldType="DATE"
               print "Adding Field: " + fieldName
               arcpy.AddField_management(featureclass, fieldName,field_type=fieldType ,field_alias=fieldAlias)
+
 
     except Exception as e:
        print e.message
