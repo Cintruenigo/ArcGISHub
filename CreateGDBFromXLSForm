@@ -1,5 +1,11 @@
 
 #Author: ichivite@esri.com
+# creates a geodatabase to hold data from an XLSForm
+# XLSForm sample: https://formhub.org/formhub_u/forms/household_survey
+# Notes:
+# Nested repeats not supported
+# No geo types supported. Assumed every survey has a single location
+
 import os, csv, arcpy
 
 
@@ -7,6 +13,13 @@ scratchWorkspace = r"D:\Ismael\Surveys"
 surveyName = "Household"
 gdb = os.path.join(scratchWorkspace,surveyName + "FGDB.gdb")
 featureclass = os.path.join (gdb,"survey")
+mxdTemplate = os.path.join(scratchWorkspace,"MapTemplate.mxd")
+mxd = os.path.join(scratchWorkspace,surveyName + ".mxd")
+msd = os.path.join(scratchWorkspace,surveyName + ".msd")
+tables = []
+
+ArcGISUser = "..."
+ArcGISPassword = "..."
 
 codedValueDomains = []
 
@@ -21,10 +34,55 @@ def main():
     arcpy.CreateFileGDB_management(scratchWorkspace, out_name=surveyName + "FGDB", out_version="CURRENT")
     
     # Create featureclass schema
-    createFCSchemaFromSurvey ()
+    createSchemaFromSurvey ()
 
+    # Create map document
+    createMapDocumentAndPublish()
+
+    # Create Service Definition and Publish
+
+    print "Done"
+
+
+
+def createMapDocumentAndPublish():
+    
+    try:
+        print "   Creating Map Document: " + mxd
+        mapDoc = arcpy.mapping.MapDocument(mxdTemplate)
+        mapDoc.summary = surveyName
+        mapDoc.tags = surveyName + ", XLSForm, FormHub.arcgis.com"
+        df = arcpy.mapping.ListDataFrames(mapDoc, "Layers")[0]
+        newlayer = arcpy.mapping.Layer(featureclass)
+        arcpy.mapping.AddLayer(df, newlayer, "AUTO_ARRANGE")
+        for table in tables:
+            print "   Adding Table to Map: " + table            
+            #tableView = arcpy.mapping.TableView(table)
+            #arcpy.mapping.AddLayer(df, tableView, "AUTO_ARRANGE")
+            print "   Layer added"
+        print "MXD: " + mxd
+        mapDoc.saveACopy(mxd)
+
+        sdDraft = os.path.join(scratchWorkspace,surveyName + ".sddraft")
+        sd = os.path.join(scratchWorkspace,surveyName + ".sd")
+        
+        analysis = arcpy.mapping.CreateMapSDDraft(mapDoc, sdDraft, surveyName, 'MY_HOSTED_SERVICES')
+        print analysis['errors']
+        
+        arcpy.StageService_server(sdDraft, sd)
+
+        print "   Publishing Map Document"
+        arcpy.SignInToPortal_server(ArcGISUser,ArcGISPassword, "")
+        arcpy.StageService_server(sdDraft, sd)
+
+        arcpy.UploadServiceDefinition_server(sd, "My Hosted Services")
+        arcpy.SignOutFromPortal_server()
+        
+    except Exception as e:
+       print e.message
+       arcpy.AddError(e.message)
    
-def createFCSchemaFromSurvey():
+def createSchemaFromSurvey():
     
     try:
        surveyCSV = os.path.join(scratchWorkspace, "survey.csv")
@@ -39,9 +97,14 @@ def createFCSchemaFromSurvey():
            fieldName = row['name']
            fieldAlias =  row['label']
 
-
+           #print fieldType
+           #If Type is a repeat, add related table to support it
+           if (fieldType.find("begin repeat")==0):
+               print "Adding Repeat: '" + fieldName + "'"
+               addRelatedTable (fieldName, reader)
+               
            # If Type is 'select_one', add a field with its corresponding coded value domain
-           if (fieldType.find("select_one ")==0):
+           elif (fieldType.find("select_one ")==0):
              domainName = fieldType.replace("select_one ","")
              print "Adding Field '" + fieldName + "' with Domain: " + domainName
              if not (domainName in codedValueDomains):
@@ -51,7 +114,7 @@ def createFCSchemaFromSurvey():
            elif (fieldType.find("select_multiple ")==0):
              choiceList = fieldType.replace("select_multiple ","")
              print "Adding Field '" + fieldName + "' With multiple Selection: " + choiceList
-             addFieldsFromMultipleChoice (featureclass,choiceList)
+             addFieldsFromMultipleChoice (choiceList)
            # If Type is 'image', 'audio' or 'video' enable attachments if not already
            elif (fieldType == "image" or fieldType == "audio" or fieldType == "video"):
              if (hasAttachments == False):
@@ -68,13 +131,71 @@ def createFCSchemaFromSurvey():
                 fieldType="DOUBLE" 
               elif (fieldType == "date") or (fieldType == "time"):
                 fieldType="DATE"
-              print "Adding Field: " + fieldName
+              print "Adding Field: '" + fieldName + "'"
               arcpy.AddField_management(featureclass, fieldName,field_type=fieldType ,field_alias=fieldAlias)
-
+              
 
     except Exception as e:
        print e.message
        arcpy.AddError(e.message)
+
+# Add related table to support Repeats
+# Note: nested repeats not supported
+def addRelatedTable(repeatName, reader):
+       print "   Adding Related Table: " + repeatName
+       try:
+         arcpy.CreateTable_management(out_path=gdb, out_name=repeatName, template="", config_keyword="")
+         table = os.path.join (gdb,repeatName)
+
+         print "   Adding Relationship class " 
+         arcpy.CreateRelationshipClass_management(origin_table=featureclass, destination_table=table, out_relationship_class=featureclass + "_" + repeatName, relationship_type="SIMPLE", forward_label=repeatName, backward_label="survey", message_direction="NONE", cardinality="ONE_TO_MANY", attributed="NONE", origin_primary_key="OBJECTID", origin_foreign_key="OBJECTID", destination_primary_key="", destination_foreign_key="")
+         tables.append(table)
+
+         row = reader.next()
+         while row:
+          fieldName = row['name']
+          fieldAlias = row['label']
+          fieldType =  row['type']
+
+          if (fieldType.find("end repeat")==0):
+               return
+
+          
+          # If Type is 'select_one', add a field with its corresponding coded value domain
+          if (fieldType.find("select_one ")==0):
+             domainName = fieldType.replace("select_one ","")
+             print "       Adding Field '" + fieldName + "' with Domain: " + domainName
+             if not (domainName in codedValueDomains):
+                addCodedValueDomain (domainName)
+             arcpy.AddField_management(table, fieldName,field_type="TEXT" ,field_alias=fieldAlias, field_domain=domainName)
+          # If Type is 'select_multiple', add as many fields as needed to support the choices 
+          elif (fieldType.find("select_multiple ")==0):
+             choiceList = fieldType.replace("select_multiple ","")
+             print "       Adding Field: '" + fieldName + "' With multiple Selection: " + choiceList
+             addFieldsFromMultipleChoice (choiceList)
+          # If Type is 'image', 'audio' or 'video' enable attachments if not already
+          elif (fieldType == "image" or fieldType == "audio" or fieldType == "video"):
+             if (hasAttachments == False):
+                print "       Enabling Attachments"
+                arcpy.EnableAttachments_management(in_dataset=featureclass)
+                hasAttachments = True
+          # Add standard fields as long as the Type is not a 'note', 'group' or empty 
+          elif ((fieldType == "text")or (fieldType == "barcode")  or (fieldType == "integer") or (fieldType == "double")or (fieldType == "date") or (fieldType == "time")):
+              if (fieldType == "text") or (fieldType=="barcode"):
+                fieldType="TEXT"
+              elif (fieldType == "integer"):
+                fieldType="LONG"
+              elif (fieldType == "decimal"):
+                fieldType="DOUBLE" 
+              elif (fieldType == "date") or (fieldType == "time"):
+                fieldType="DATE"
+              print "       Adding Field: '" + fieldName + "'"
+              arcpy.AddField_management(table, fieldName,field_type=fieldType ,field_alias=fieldAlias)
+          row = reader.next()
+          
+       except Exception as e:
+         print e.message
+         arcpy.AddError(e.message) 
 
 # Adds a Coded Value Domain to workspace based on choiceList
 def addCodedValueDomain(inputChoiceListName):                   
@@ -104,12 +225,12 @@ def addCodedValueDomain(inputChoiceListName):
        print e.message
        arcpy.AddError(e.message)
 # Adds fields to a FC to support multiple choices questions.
-def addFieldsFromMultipleChoice(inputFeatureclass,inputChoiceListName):
+def addFieldsFromMultipleChoice(inputChoiceListName):
     print "   addFieldsFromMultipleChoice(" + inputChoiceListName + ")"
     try:
        choicesCSV = os.path.join(scratchWorkspace, "choices.csv")
        with open(choicesCSV) as csvfile:
-         reader = csv.DictReader(csvfile)
+         reader = csv.DictReader(choicesCSV)
          for row in reader:
             choiceListName = row['list name']
             
@@ -117,7 +238,7 @@ def addFieldsFromMultipleChoice(inputFeatureclass,inputChoiceListName):
                 fieldName = row['name']
                 fieldAlias = row['label']
                 print "     adding Choice as new Field: '" + fieldName + "'"
-                arcpy.AddField_management(inputFeatureclass, fieldName,field_type="SHORT" ,field_alias=fieldAlias)
+                arcpy.AddField_management(featureclass, fieldName,field_type="SHORT" ,field_alias=fieldAlias)
                 
 
     except Exception as e:
