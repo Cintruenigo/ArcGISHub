@@ -1,0 +1,85 @@
+
+#Author: ichivite@esri.com
+import arcpy
+
+import os, csv, arcpy
+
+
+scratchWorkspace = r"D:\Ismael"
+
+def main():
+
+    print ""
+
+    # Unzip input file
+
+    # Create fileGDB
+    #arcpy.CreateFileGDB_management(scratchWorkspace, out_name="SurveyFGDB", out_version="CURRENT")
+    gdb = os.path.join(scratchWorkspace,"SurveyFGDB.gdb")
+
+    # Get choices csv file, create and populate domains
+    createGDBDomainsFromChoices(scratchWorkspace,gdb)
+    # Create featureclass schema
+    createFCSchemaFromSurvey (gdb)
+    
+def createFCSchemaFromSurvey(inputGDB):
+    
+    try:
+       surveyCSV = os.path.join(scratchWorkspace, "survey.csv")
+
+
+       featureclass = os.path.join (inputGDB,"survey")
+       arcpy.CreateFeatureclass_management(inputGDB, 'survey' ,"POINT", spatial_reference=arcpy.SpatialReference('WGS 1984'))
+       
+
+       with open(surveyCSV) as csvfile:
+         reader = csv.DictReader(csvfile)
+         for row in reader:
+           fieldType = row['type']
+           fieldName = row['name']
+           fieldAlias =  row['label']
+
+           domainName = fieldType.find("select_one ")
+           if (domainName==0):
+             domainName = fieldType.replace("select_one ","")
+             arcpy.AddField_management(featureclass, fieldName,field_type="TEXT" ,field_alias=fieldAlias, field_domain=domainName)
+           else:         
+             if ((not fieldType.isspace()) and (len(fieldType)>0) and ( (fieldType == "text")or (fieldType == "barcode")  or (fieldType == "integer") or (fieldType == "double")or (fieldType == "date") or (fieldType == "time")) ):
+              if (fieldType == "text") or (fieldType=="barcode"):
+                fieldType="TEXT"
+              elif (fieldType == "integer"):
+                fieldType="LONG"
+              elif (fieldType == "decimal"):
+                fieldType="DOUBLE" 
+              elif (fieldType == "date") or (fieldType == "time"):
+                fieldType="DATE"
+              arcpy.AddField_management(featureclass, fieldName,field_type=fieldType ,field_alias=fieldAlias)
+
+    except Exception as e:
+       print e.message
+       arcpy.AddError(e.message)
+
+def createGDBDomainsFromChoices(inputDirectory,inputGDB):
+    
+    try:
+       choicesCSV = os.path.join(scratchWorkspace, "choices.csv")
+       domainsList = []
+       with open(choicesCSV) as csvfile:
+         reader = csv.DictReader(csvfile)
+         for row in reader:
+            domainName = row['list name']
+            print("-" + row['list name'] + "-" + str(len(domainName)))
+            if ((not domainName.isspace()) and (len(domainName)>0)):
+                if not(domainName in domainsList):
+                    domainsList.append (domainName)
+                    arcpy.CreateDomain_management(in_workspace=inputGDB, domain_name=domainName, domain_description=domainName, field_type="TEXT", domain_type="CODED", split_policy="DEFAULT", merge_policy="DEFAULT")
+                            
+                codedValue = row['name']
+                codedDescription = row['label']
+                arcpy.AddCodedValueToDomain_management(in_workspace=inputGDB, domain_name=domainName, code=codedValue, code_description=codedDescription)
+    except Exception as e:
+       print e.message
+       arcpy.AddError(e.message)
+        
+if __name__ == "__main__":
+     main()
