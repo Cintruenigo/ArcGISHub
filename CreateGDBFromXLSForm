@@ -1,6 +1,6 @@
 
 #Author: ichivite@esri.com
-# creates a geodatabase to hold data from an XLSForm and publishes map document to ArcGIS Online as a Feature Service
+# creates a geodatabase to hold data from an XLSForm
 # XLSForm sample: https://formhub.org/formhub_u/forms/household_survey
 # Notes:
 # Nested repeats not supported
@@ -19,8 +19,8 @@ mxd = os.path.join(scratchWorkspace,surveyName + ".mxd")
 msd = os.path.join(scratchWorkspace,surveyName + ".msd")
 tables = []
 
-ArcGISUser = "Ismael"
-ArcGISPassword = "Redlandsbox"
+ArcGISUser = "..."
+ArcGISPassword = "..."
 
 codedValueDomains = []
 
@@ -32,10 +32,10 @@ def main():
     # Unzip input file
 
     # Create fileGDB
-    #arcpy.CreateFileGDB_management(scratchWorkspace, out_name=surveyName + "FGDB", out_version="CURRENT")
+    arcpy.CreateFileGDB_management(scratchWorkspace, out_name=surveyName + "FGDB", out_version="CURRENT")
     
     # Create featureclass schema
-    #createSchemaFromSurvey ()
+    createSchemaFromSurvey ()
 
     # Create map document
     createMapDocumentAndPublish()
