@@ -1,6 +1,6 @@
 
 #Author: ichivite@esri.com
-# creates a geodatabase to hold data from an XLSForm
+# creates a geodatabase to hold data from an XLSForm and publishes map document to ArcGIS Online as a Feature Service
 # XLSForm sample: https://formhub.org/formhub_u/forms/household_survey
 # Notes:
 # Nested repeats not supported
