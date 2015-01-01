@@ -6,12 +6,12 @@
 # Nested repeats not supported
 # No geo types supported. Assumed every survey has a single location
 
-import os, csv, arcpy, sys
+import os, csv, arcpy, sys, time
 import xml.dom.minidom as DOM
 
 
 scratchWorkspace = r"D:\Ismael\Surveys"
-surveyName = "Household"
+surveyName = "Soy"
 gdb = os.path.join(scratchWorkspace,surveyName + "FGDB.gdb")
 featureclass = os.path.join (gdb,"survey")
 mxdTemplate = os.path.join(scratchWorkspace,"MapTemplate.mxd")
@@ -48,7 +48,7 @@ def addCapabilities(SDdraft):
     
     try:
         
-        print "Adding Capabilities..."
+        print "   Adding Capabilities" + SDdraft
         doc = DOM.parse(SDdraft)
         # Turn off caching
         configProps = doc.getElementsByTagName('ConfigurationProperties')[0]
@@ -78,14 +78,14 @@ def addCapabilities(SDdraft):
 
         
     except Exception as e:
-       print "Error (Adding Capabilities): " + e.message
+       print "   Error (Adding Capabilities): " + e.message
        arcpy.AddError(e.message)
    
 
 def createMapDocumentAndPublish():
     
     try:
-        print "   Creating Map Document: " + mxd
+        print "Creating Map Document: " + mxd
         mapDoc = arcpy.mapping.MapDocument(mxdTemplate)
         mapDoc.summary = surveyName
         mapDoc.tags = surveyName + ", XLSForm, FormHub.arcgis.com"
@@ -100,18 +100,19 @@ def createMapDocumentAndPublish():
         mapDoc.saveACopy(mxd)
 
         sdDraft = os.path.join(scratchWorkspace,surveyName + ".sddraft")
-        addCapabilities (sdDraft)
         sd = os.path.join(scratchWorkspace,surveyName + ".sd")
-        
+
+        print "Creating Service Defintion"
         analysis = arcpy.mapping.CreateMapSDDraft(mxd, sdDraft, surveyName, 'MY_HOSTED_SERVICES')
         if analysis['errors'] != {}:
             print analysis['errors']
         else:
-            print "   Publishing Map Document. (This may take half a minute or so...)"
+            addCapabilities (sdDraft)
+            print "Publishing Map Document. (This may take half a minute or so...)"
             arcpy.SignInToPortal_server(ArcGISUser,ArcGISPassword, "")
-            #arcpy.StageService_server(sdDraft, sd)
+            arcpy.StageService_server(sdDraft, sd)
 
-            #arcpy.UploadServiceDefinition_server(sd, "My Hosted Services")
+            arcpy.UploadServiceDefinition_server(sd, "My Hosted Services")
             arcpy.SignOutFromPortal_server()
 
             print "Success!"
