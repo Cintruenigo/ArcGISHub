@@ -6,7 +6,8 @@
 # Nested repeats not supported
 # No geo types supported. Assumed every survey has a single location
 
-import os, csv, arcpy
+import os, csv, arcpy, sys
+import xml.dom.minidom as DOM
 
 
 scratchWorkspace = r"D:\Ismael\Surveys"
@@ -18,8 +19,8 @@ mxd = os.path.join(scratchWorkspace,surveyName + ".mxd")
 msd = os.path.join(scratchWorkspace,surveyName + ".msd")
 tables = []
 
-ArcGISUser = "..."
-ArcGISPassword = "..."
+ArcGISUser = "Ismael"
+ArcGISPassword = "Redlandsbox"
 
 codedValueDomains = []
 
@@ -31,10 +32,10 @@ def main():
     # Unzip input file
 
     # Create fileGDB
-    arcpy.CreateFileGDB_management(scratchWorkspace, out_name=surveyName + "FGDB", out_version="CURRENT")
+    #arcpy.CreateFileGDB_management(scratchWorkspace, out_name=surveyName + "FGDB", out_version="CURRENT")
     
     # Create featureclass schema
-    createSchemaFromSurvey ()
+    #createSchemaFromSurvey ()
 
     # Create map document
     createMapDocumentAndPublish()
@@ -43,7 +44,43 @@ def main():
 
     print "Done"
 
+def addCapabilities(SDdraft):
+    
+    try:
+        
+        print "Adding Capabilities..."
+        doc = DOM.parse(SDdraft)
+        # Turn off caching
+        configProps = doc.getElementsByTagName('ConfigurationProperties')[0]
+        propArray = configProps.firstChild
+        propSets = propArray.childNodes
+        for propSet in propSets:
+            keyValues = propSet.childNodes
+            for keyValue in keyValues:
+                if keyValue.tagName == 'Key':
+                    if keyValue.firstChild.data == "isCached":
+                        keyValue.nextSibling.firstChild.data = "false"
 
+        # Turn on feature access capabilities
+        configProps = doc.getElementsByTagName('Info')[0]
+        propArray = configProps.firstChild
+        propSets = propArray.childNodes
+        for propSet in propSets:
+            keyValues = propSet.childNodes
+            for keyValue in keyValues:
+                if keyValue.tagName == 'Key':
+                    if keyValue.firstChild.data == "WebCapabilities":
+                        keyValue.nextSibling.firstChild.data = "Query,Create,Update,Delete,Uploads,Editing"
+        # Write the new draft to disk
+        f = open(SDdraft, 'w')
+        doc.writexml( f )
+        f.close()
+
+        
+    except Exception as e:
+       print "Error (Adding Capabilities): " + e.message
+       arcpy.AddError(e.message)
+   
 
 def createMapDocumentAndPublish():
     
@@ -55,31 +92,32 @@ def createMapDocumentAndPublish():
         df = arcpy.mapping.ListDataFrames(mapDoc, "Layers")[0]
         newlayer = arcpy.mapping.Layer(featureclass)
         arcpy.mapping.AddLayer(df, newlayer, "AUTO_ARRANGE")
+
         for table in tables:
             print "   Adding Table to Map: " + table            
-            #tableView = arcpy.mapping.TableView(table)
-            #arcpy.mapping.AddLayer(df, tableView, "AUTO_ARRANGE")
-            print "   Layer added"
-        print "MXD: " + mxd
+            tableView = arcpy.mapping.TableView(table)
+            arcpy.mapping.AddTableView(df, tableView)
         mapDoc.saveACopy(mxd)
 
         sdDraft = os.path.join(scratchWorkspace,surveyName + ".sddraft")
+        addCapabilities (sdDraft)
         sd = os.path.join(scratchWorkspace,surveyName + ".sd")
         
-        analysis = arcpy.mapping.CreateMapSDDraft(mapDoc, sdDraft, surveyName, 'MY_HOSTED_SERVICES')
-        print analysis['errors']
-        
-        arcpy.StageService_server(sdDraft, sd)
+        analysis = arcpy.mapping.CreateMapSDDraft(mxd, sdDraft, surveyName, 'MY_HOSTED_SERVICES')
+        if analysis['errors'] != {}:
+            print analysis['errors']
+        else:
+            print "   Publishing Map Document. (This may take half a minute or so...)"
+            arcpy.SignInToPortal_server(ArcGISUser,ArcGISPassword, "")
+            #arcpy.StageService_server(sdDraft, sd)
 
-        print "   Publishing Map Document"
-        arcpy.SignInToPortal_server(ArcGISUser,ArcGISPassword, "")
-        arcpy.StageService_server(sdDraft, sd)
+            #arcpy.UploadServiceDefinition_server(sd, "My Hosted Services")
+            arcpy.SignOutFromPortal_server()
 
-        arcpy.UploadServiceDefinition_server(sd, "My Hosted Services")
-        arcpy.SignOutFromPortal_server()
+            print "Success!"
         
     except Exception as e:
-       print e.message
+       print "Error: " + e.message
        arcpy.AddError(e.message)
    
 def createSchemaFromSurvey():
@@ -146,11 +184,13 @@ def addRelatedTable(repeatName, reader):
        try:
          arcpy.CreateTable_management(out_path=gdb, out_name=repeatName, template="", config_keyword="")
          table = os.path.join (gdb,repeatName)
+         # We append the table to a global list to avoid creating this table twice
+         tables.append(table)
+         arcpy.AddField_management(table, "KeyField",field_type="LONG" ,field_alias="KeyField")
 
          print "   Adding Relationship class " 
-         arcpy.CreateRelationshipClass_management(origin_table=featureclass, destination_table=table, out_relationship_class=featureclass + "_" + repeatName, relationship_type="SIMPLE", forward_label=repeatName, backward_label="survey", message_direction="NONE", cardinality="ONE_TO_MANY", attributed="NONE", origin_primary_key="OBJECTID", origin_foreign_key="OBJECTID", destination_primary_key="", destination_foreign_key="")
-         tables.append(table)
-
+         arcpy.CreateRelationshipClass_management(origin_table=featureclass, destination_table=table, out_relationship_class=featureclass + "_" + repeatName, relationship_type="SIMPLE", forward_label=repeatName, backward_label="survey", message_direction="NONE", cardinality="ONE_TO_MANY", attributed="NONE", origin_primary_key="OBJECTID", origin_foreign_key="KeyField", destination_primary_key="", destination_foreign_key="")
+         
          row = reader.next()
          while row:
           fieldName = row['name']
@@ -160,7 +200,6 @@ def addRelatedTable(repeatName, reader):
           if (fieldType.find("end repeat")==0):
                return
 
-          
           # If Type is 'select_one', add a field with its corresponding coded value domain
           if (fieldType.find("select_one ")==0):
              domainName = fieldType.replace("select_one ","")
