@@ -1,0 +1,39 @@
+
+function addGeodatabase(gdbPath,map) {
+    console.log("Adding gdb..." + gdbPath);
+    var gdb = ArcGISRuntime.createObject("Geodatabase", { path: cleanPath(gdbPath) });
+    gdb.useAdvancedSymbology=true;
+
+    var layerCount = map.layerCount;
+    if (gdb.valid) {
+        var i = 0;
+        for (var gdbFeatureTable in gdb.geodatabaseFeatureTables) {
+            var featureLayer = ArcGISRuntime.createObject("FeatureLayer");
+            featureLayer.featureTable = gdb.geodatabaseFeatureTables[gdbFeatureTable];
+            console.log ("--> Adding..." + featureLayer.featureTable.featureServiceLayerName)
+            featureLayer.enableLabels=true;
+            map.insertLayer(featureLayer, layerCount);
+            i++;
+        }
+    } else {
+        console.log("addGeodatabase error: Invalid Geodatabase");
+    }
+}
+function cleanPath(inputPath) {
+    var outputPath;
+    if (inputPath.toString().slice(0,8) === "file:///") {
+        if (currentOS === "osx")
+            outputPath = inputPath.toString().slice(7); //we need the first forward slash on Mac (/Users/ not Users/);
+        else if (currentOS === "windows")
+            outputPath = inputPath.toString().slice(8);  //omit the first forward slash on Windows (C:/ not /C:/);
+        else if (currentOS === "linux")
+            outputPath = inputPath.toString().slice(7); //we need the first forward slash on Linux (/Users/ not Users/);
+    } else if (inputPath.toString().slice(0,6) === "file:/") {
+        outputPath = inputPath.toString().slice(7);
+    } else {
+        outputPath = inputPath.toString();
+    }
+
+    return outputPath;
+}
+
