@@ -1,0 +1,198 @@
+////------------------------------------------------------------------------------
+// Test.qml
+// Created 2015-03-13 17:34:33
+//------------------------------------------------------------------------------
+
+import QtQuick 2.3
+import QtQuick.Controls 1.2
+import QtPositioning 5.3
+
+
+Rectangle {
+    id: mainDialog
+    width: 800
+    height: 532
+    color: "#F9F9F9"
+
+    Rectangle{
+
+        id: loginDialog_Shadow
+        height:loginDialog.height
+        width: loginDialog.width
+        border.color: "#B3B3B3"
+        color: "#C5C5C5"
+
+        anchors{
+                verticalCenter: loginDialog.verticalCenter
+                horizontalCenter:  loginDialog.horizontalCenter
+                horizontalCenterOffset: 5
+                verticalCenterOffset: 5
+            }
+        radius: loginDialog.radius
+        Behavior on opacity {
+            NumberAnimation { duration: 1300 }
+        }
+    }
+
+
+
+    Rectangle{
+
+        id: loginDialog
+        height:200
+        width: 250
+        border.color: "#7D7D7D"
+        anchors{
+            verticalCenter: parent.verticalCenter
+            horizontalCenter:  parent.horizontalCenter
+        }
+        radius: 8
+
+        Behavior on opacity {
+            NumberAnimation { duration: 1000 }
+        }
+
+
+        Label {
+            id: lblUsername
+            text: "Username"
+            font.pixelSize: 15
+            color: "black"
+
+            anchors.left: parent.left
+            anchors.leftMargin: 30
+            anchors.top: parent.top
+            anchors.topMargin: 20
+
+        }
+
+        Rectangle{
+
+            id: txtUserName
+            height: 25
+            width: 200
+            border.color: loginDialog.border.color
+            color: mainDialog.color
+            radius: loginDialog.radius - 3
+            anchors{
+                top: lblUsername.bottom
+                topMargin: 5
+                left: lblUsername.left
+            }
+            TextInput {
+                id: inputUsername
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 10
+                color: "black"
+                font.pixelSize: 14
+                activeFocusOnPress: true
+                focus: true
+                Keys.onTabPressed: inputPassword.focus = true
+                onEditingFinished:{
+                   //inputPassword.focus = true
+                   inputPassword.forceActiveFocus()
+                }
+
+
+            }
+
+        }
+
+        Label {
+            id: lblPassword
+            text: "Password"
+            font.pixelSize: lblUsername.font.pixelSize
+            color: lblUsername.color
+
+
+            anchors.left: parent.left
+            anchors.leftMargin: lblUsername.anchors.leftMargin
+            anchors.top: txtUserName.top
+            anchors.topMargin: 50
+
+        }
+
+        Rectangle{
+
+            id: txtPassword
+            height: txtUserName.height
+            width: txtUserName.width
+            border.color: txtUserName.border.color
+            color: txtUserName.color
+            radius: txtUserName.radius
+            anchors{
+                top: lblPassword.bottom
+                topMargin: 5
+                left: lblPassword.left
+            }
+            TextInput {
+                id: inputPassword
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 10
+                color: inputUsername.color
+                font.pixelSize: 14
+                activeFocusOnPress: true
+                echoMode: TextInput.Password
+
+                Keys.onTabPressed: lblDebug.text += "\n ...call Login!"
+                onEditingFinished:{
+                   lblDebug.text += "\n ...call Login!"
+                   //Call Login here...
+                }
+            }
+        }
+
+        Rectangle{
+
+            id: btnLogin
+            height: 25
+            width: 65
+            border.color: "#E67200"
+            color: "#FF7F00"
+            radius: 10
+            anchors{
+                top: txtPassword.bottom
+                topMargin: 15
+                right: txtPassword.right
+            }
+            Label {
+                id: lblLogin
+                text: "Login"
+                font.pixelSize: lblUsername.font.pixelSize - 2
+                color: "white"
+
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            MouseArea{
+                anchors.fill: parent
+                enabled:true
+                onPressed: {
+                    loginDialog_Shadow.visible=false
+                }
+                onReleased:{
+                    loginDialog_Shadow.visible=true
+                }
+                onClicked: {
+                    //This will call Login... function
+                    loginDialog.opacity = 0
+                    loginDialog_Shadow.opacity = 0
+                }
+            }
+        }
+        Label {
+            id: lblForgotPassword
+            text: "Bad memory?"
+            font.pixelSize: lblUsername.font.pixelSize - 2
+            color: "steelblue"
+            font.underline: true
+
+            anchors.left: txtUserName.left
+            anchors.verticalCenter: btnLogin.verticalCenter
+        }
+    }
+
+}
+
