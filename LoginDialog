@@ -5,14 +5,17 @@
 
 import QtQuick 2.3
 import QtQuick.Controls 1.2
-import QtPositioning 5.3
+
 
 
 Rectangle {
     id: mainDialog
     width: 800
     height: 532
+    //fillMode: Image.PreserveAspectCrop
+    //source: "background.jpg"
     color: "#F9F9F9"
+
 
     Rectangle{
 
