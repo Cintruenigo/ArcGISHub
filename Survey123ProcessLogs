@@ -1,0 +1,63 @@
+import sys
+import  os, json, csv, urllib
+from dateutil import parser
+
+def main(argv=None):
+
+    logFilePath = r"c:\temp"
+    csvPath = r"c:\temp\logs.csv"
+
+    file_paths = get_filepaths(logFilePath)
+    try:
+        with open(csvPath, 'w') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames = ['RemoteAddress','Time','Language','XLSFileName','Code','Message'])
+            writer.writeheader()
+            for file in file_paths:    
+                with open(file,'r') as data_file:                    
+                    print "Processing: " + file
+                    try:
+                        data = json.load(data_file)
+                    except:
+                        print "    Error parsing JSON..."
+                        pass
+                    attributes = []
+                    ip = data['remoteAddress']
+                    #originIP = urllib.urlopen('http://api.hostip.info/get_html.php?ip=' + ip + '&position=true').read()
+                    #print originIP
+                    attributes.append (ip)
+                    attributes.append (parser.parse(data['files']['xlsform']['mtime']).strftime("%Y-%m-%d %H:%M"))  
+                    attributes.append(data['headers']['accept-language'])
+                    attributes.append (data['files']['xlsform']['name'].encode('utf_8'))
+                    attributes.append(data['result']['code'])
+                    attributes.append(data['result']['message'])
+
+                    writer.writerow({'RemoteAddress': attributes[0], 'Time': attributes[1], 'Language': attributes[2],'XLSFileName':attributes[3],'Code':attributes[4],'Message':attributes[5]})
+                        
+    except Exception:
+        print "================="
+        raise
+        pass
+        
+                         
+def get_filepaths(directory):
+    """
+    This function will generate the file names in a directory 
+    tree by walking the tree either top-down or bottom-up. For each 
+    directory in the tree rooted at directory top (including top itself), 
+    it yields a 3-tuple (dirpath, dirnames, filenames).
+    """
+    file_paths = []  # List which will store all of the full filepaths.
+
+    # Walk the tree.
+    for root, directories, files in os.walk(directory):
+        for filename in files:
+            if os.path.splitext(filename)[1]==".json":
+                # Join the two strings in order to form the full filepath.
+                filepath = os.path.join(root, filename)
+                file_paths.append(filepath)  # Add it to the list.
+                #print filepath
+
+    return file_paths  # Self-explanatory.
+
+if __name__ == "__main__":
+     sys.exit(main(sys.argv[1:]))
