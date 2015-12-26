@@ -1,0 +1,107 @@
+#Simple routine to export a TPK
+
+import urllib, json, time
+
+service = 'http://tiledbasemaps.arcgis.com/arcgis/rest/services/USA_Topo_Maps/MapServer'
+#service = 'http://sampleserver6.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer'
+levels = '2-9'
+extent = '-13578942,5406262,-13510153,5490705'
+token = '_WSk4zNn77AWdR5mNw5yksRgBLsdInGf-9V_J2HiQTGbS9mUMCdbIedyEuwvBxiLy8j7r1uQxQ1rP3oqcSVbiS5Jrt4NLSLOsWOaWhhmlIXLBW7d4k9c_9W9GNEOdlT012GrASO3N00w4zw5S9aqOKAtStPlGhtGegScCXwXH5-ujZGW3CD1XtLgG1dBaXmFKb9Xk2xxEavHTxOkygENnqunh9aCnd9C1Z5ykre7JWbAL3Zm-lv1l5WBjocFWDyx'
+user = 'xxx'
+password='xxx'
+portalUrl='https://arcgis.com'
+referer = 'https://arcgis.com'
+
+def generatePortalToken():  
+    '''Retrieves a token to be used with API requests.''''''Retrieves a token to be used with API requests.'''  
+    parameters = urllib.urlencode({'username' : user,  
+                                   'password' : password,  
+                                   'client' : 'referer',  
+                                   'referer': referer,  
+                                   'expiration': 5,  
+                                   'f' : 'json'})  
+  
+    response = urllib.urlopen(portalUrl + '/sharing/rest/generateToken?',  
+                              parameters).read()  
+    try:  
+        jsonResponse = json.loads(response)  
+        if 'token' in jsonResponse:  
+            return jsonResponse['token']  
+        elif 'error' in jsonResponse:  
+            print jsonResponse['error']['message']  
+            for detail in jsonResponse['error']['details']:  
+                print detail  
+                  
+      
+    except:  
+        print 'An unspecified error occurred.'  
+  
+
+def submitExportTilesJob(service,levels,extent):  
+    parameters = urllib.urlencode({  
+                                   'f' : 'json',  
+                                   'tilePackage' : 'true',  
+                                   'exportBy' : 'LevelID',  
+                                   'levels' : levels,  
+                                   'exportExtent' : extent,
+                                   'token':token,
+                                   'referer': referer})  
+  
+    response = urllib.urlopen(service + '/exportTiles?', parameters).read()  
+    return json.loads(response)
+
+def getExportTilesJobStatus(jobId):
+    parameters = urllib.urlencode({  
+                                   'f' : 'pjson',
+                                   'referer': referer, 
+                                   'token':token})  
+  
+    response = urllib.urlopen(service + '/Jobs/' + jobId, parameters).read()
+    return json.loads(response)
+
+def getExportTilesOutput(jobId):
+    parameters = urllib.urlencode({  
+                                   'f' : 'pjson',
+                                   'referer': referer, 
+                                   'token':token})  
+  
+    response = urllib.urlopen(service + '/Jobs/' + jobId + "/results/out_service_url", parameters).read()
+    responseJSON = json.loads(response)
+  
+    output =  responseJSON['value']
+    
+    response = urllib.urlopen(output, parameters).read()
+    responseJSON = json.loads(response)
+  
+    return responseJSON['files'][0]['url']
+
+
+#########################
+#########################
+print 'Getting token for: ' + user
+
+##token = generatePortalToken()
+print 'TOKEN ' +  token
+    
+exportTilesResponse = submitExportTilesJob (service,levels,extent)
+print exportTilesResponse
+
+status = getExportTilesJobStatus(exportTilesResponse['jobId'])
+
+while status!='esriJobSucceeded':
+    time.sleep(2)
+    status = getExportTilesJobStatus(exportTilesResponse['jobId'])['jobStatus']
+    print status
+
+output =  getExportTilesOutput(exportTilesResponse['jobId'])
+
+
+print '\n' +  output
+
+
+
+
+
+
+
+
